@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'talker = sphero_node.sphero_node:main',
+            'sphero = sphero_node.sphero_node:main',
         ],
     },
 )
