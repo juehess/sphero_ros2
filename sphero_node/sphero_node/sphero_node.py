@@ -4,26 +4,19 @@ from rclpy.node import Node
 from spherov2 import scanner
 from spherov2.sphero_edu import SpheroEduAPI
 from spherov2.types import Color
-import spherov2
-from spherov2.toy import Toy
-import contextlib
-import sys
 
-import math
-import sys
-import time
 from datetime import datetime
 from datetime import timedelta
 import argparse
 
 from sensor_msgs.msg import Imu
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Point, Pose, Quaternion, Twist, TwistWithCovariance, Vector3
-from std_msgs.msg import ColorRGBA, Float32, Bool
-from std_srvs.srv import setBool, Empty
-from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
+from geometry_msgs.msg import Point, Pose, Quaternion, Twist, Vector3
+from std_msgs.msg import ColorRGBA, Float32
+from std_srvs.srv import SetBool
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
 
-from transformations import *
+from sphero_node.transformations.transformations import *
 
 class SpheroROSDriver(Node):
 
@@ -77,6 +70,8 @@ class SpheroROSDriver(Node):
         self.power_state = 0
         self.spin_duration = 0.1
 
+        self.start()
+
     def __del__(self):
         self.stopSphero()
 
@@ -103,14 +98,14 @@ class SpheroROSDriver(Node):
 
     def _init_pubsub(self):
         self.odom_pub = self.create_publisher(Odometry, 'odom', 10)
-        self.imu_pub = self.create_publisher(Imu, 'imu', 10)
-        self.diag_pub = self.create_publisher(DiagnosticArray, '/diagnostics', 10)
+        #self.imu_pub = self.create_publisher(Imu, 'imu', 10)
+        #self.diag_pub = self.create_publisher(DiagnosticArray, '/diagnostics', 10)
         self.back_led_sub = self.create_subscription(ColorRGBA, 'set_back_led', self.sub_set_back_led, 10)
         self.front_led_sub = self.create_subscription(ColorRGBA, 'set_front_led', self.sub_set_front_led, 10)
         self.main_led_sub = self.create_subscription(ColorRGBA, 'set_main_led', self.sub_set_main_led, 10)
         self.cmd_vel_sub = self.create_subscription(Twist, 'cmd_vel', self.sub_cmd_vel, 10)
-        self.stabilization_srv = self.create_service(setBool, 'set_stabilization', self.srv_set_stabilization)
-        self.aim_srv = self.create_service(setBool, 'reset_aim', self.srv_reset_aim)
+        self.stabilization_srv = self.create_service(SetBool, 'set_stabilization', self.srv_set_stabilization)
+        self.aim_srv = self.create_service(SetBool, 'reset_aim', self.srv_reset_aim)
         self.heading_sub = self.create_subscription(Float32, 'set_heading', self.set_heading, 10)
 #        self.angular_velocity_sub = self.create_subscription(Float32, 'set_angular_velocity', self.set_angular_velocity, 10)
 
@@ -185,7 +180,11 @@ class SpheroROSDriver(Node):
             heading_deg = 360 - int(self.normalize_angle_positive(msg.data)*180.0/math.pi)
             self.robot.set_heading(heading_deg, False)
 
-    def pub_odom(self):
+    def pub_odom(self, data: Dict):
+
+        info = ", ".join("{:1.2f}".format(data.get(param)) for param in Quaternion)
+        print(f"[{data.get(CoreTime.core_time):1.2f}] Quaternion (x, y, z, w): {info}")
+        print("=" * 60)
 
         now = datetime.now()
 
@@ -240,15 +239,18 @@ class SpheroROSDriver(Node):
         self.robot.reset_aim()
         return response
 
-def main(mac_address):
+def main(args=None):
 
-#    mac_address = "FA:57:99:71:5A:F5"
+    #get MAC address from command line
+    parser = argparse.ArgumentParser(description='Pass MAC Address')
+    parser.add_argument('-m', '--mac_address',  nargs='?', type=str, const="FA:57:99:71:5A:F5", default="FA:57:99:71:5A:F5", help='The MAC address of the sphero robot.')
+    argparse_args = parser.parse_args()
 
     #find all available spheros
     toy_list = scanner.find_toys()
     #select the sphero with the mac address given
     for toy in toy_list:
-        if toy.address == mac_address:
+        if toy.address == argparse_args.mac_address:
             print("Found the correct Sphero!")
             break
     else:
@@ -268,9 +270,4 @@ def main(mac_address):
             rclpy.shutdown()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Pass MAC Address')
-    parser.add_argument("mac_address", nargs='?', type=str, default="FA:57:99:71:5A:F5",
-                        help='The MAC address of the sphero robot.')
-    args = parser.parse_args()
-
-    main(args.mac_address)
+    main()
