@@ -16,7 +16,8 @@ from std_msgs.msg import ColorRGBA, Float32
 from std_srvs.srv import SetBool
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
 
-from sphero_node.transformations.transformations import *
+from transformations.transformations import *
+from typing import Dict
 
 class SpheroROSDriver(Node):
 
@@ -180,51 +181,9 @@ class SpheroROSDriver(Node):
             heading_deg = 360 - int(self.normalize_angle_positive(msg.data)*180.0/math.pi)
             self.robot.set_heading(heading_deg, False)
 
-    def pub_odom(self, data: Dict):
+    def pub_odom(self, msg):
 
-        info = ", ".join("{:1.2f}".format(data.get(param)) for param in Quaternion)
-        print(f"[{data.get(CoreTime.core_time):1.2f}] Quaternion (x, y, z, w): {info}")
-        print("=" * 60)
-
-        now = datetime.now()
-
-        #get info from robot
-        location = self.robot.get_location()
-        odom_x = location['y'] / 100.0
-        odom_y = -1.0 * location['x'] / 100.0 #plus is right, negative is left --> using right handed coordinate system
-
-        #TODO: check correct axis orientation --> yaw most likely other direction
-        orientation = self.robot.get_orientation()
-        roll = orientation['roll']
-        pitch = orientation['pitch']
-        yaw = orientation['yaw']
-        q_orientation = quaternion_from_euler (roll, pitch, yaw)
-
-        velocity = self.robot.get_velocity()
-        vel_lin_x = velocity['y'] / 100.0
-        vel_lin_y = -1.0 * velocity['x'] / 100.0
-
-        velocity_gyro = self.robot.get_gyroscope() # in -2000 to 2000 degrees per second
-        vel_ang_z = velocity_gyro['yaw'] * math.pi / 180.0
-
-
-
-        #fill odometry message
-        odom = Odometry(header=Header(frame_id="odom"), child_frame_id='base_footprint')
-        odom.header.stamp.sec = now.second
-        odom.header.stamp.nanosec = now.microsecond * 1000
-#        odom.pose.pose = Pose(position=Point(x=odom_x, y=odom_y, z=0.0),
-#                              orientation=Quaternion(x=0.0, y=0.0, z=0.0, w=1.0))
-        odom.pose.pose = Pose(position=Point(x=odom_x, y=odom_y, z=0.0),
-                              orientation=Quaternion(x=q_orientation[0], y=q_orientation[1], z=q_orientation[2], w=q_orientation[3]))
-
-        odom.twist.twist = Twist(linear=Vector3(x=vel_lin_x, y=vel_lin_y, z=0.0),
-                                 angular=Vector3(x=0.0, y=0.0, z=vel_ang_z))
-        odom.pose.covariance = self.ODOM_POSE_COVARIANCE
-        odom.twist.covariance = self.ODOM_TWIST_COVARIANCE
-
-        #publish the message
-        self.odom_pub.publish(odom)
+        self.odom_pub.publish(msg)
 
     def srv_set_stabilization(self, request, response):
         self.get_logger().info('Incoming request to set stabilization ' + str(request.data))

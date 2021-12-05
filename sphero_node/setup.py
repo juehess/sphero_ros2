@@ -21,8 +21,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'sphero = sphero_node.sphero_node:main',
-            'sphero2 = sphero_node.sphero_node2:main',
+            'sphero = sphero_node.sphero_node_pysphero:main',
+            'sphero_tf_pub = sphero_node.odom_tf_pub:main',
         ],
     },
 )
