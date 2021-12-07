@@ -6,7 +6,13 @@ def generate_launch_description():
         Node(
             package='sphero_node',
             namespace='sphero',
-            executable='sphero_node',
+            executable='sphero',
             name='sphero'
         ),
+        Node(
+            package='sphero_node',
+            namespace='sphero',
+            executable='sphero_tf_pub',
+            name='sphero_tf_pub'
+        )
     ])
