@@ -2,6 +2,8 @@ import logging
 import math
 import copy
 import geometry_msgs.msg
+import argparse
+import re
 
 import rclpy
 from rclpy.node import Node
@@ -344,13 +346,30 @@ class SensorParse:
         sensor_data = copy.deepcopy(data)
         lock_sensor_data.release()
 
-def main(args=None):
+
+
+#https://gist.github.com/netdisciple/5b390df991e6f17928380a3fcf7e7de6
+def validate_mac(args):
+    mac_hwaddr = '{}'.format(args.mac_address)
+    mac_hwaddr = str(mac_hwaddr.lower())[2:-2]
+    mac_validation = bool(re.match('^' + '[\:]'.join(['([0-9a-f]{2})']*6) + '$', mac_hwaddr))
+    return mac_validation
+
+def main():
 
     #get MAC address from command line
-    #parser = argparse.ArgumentParser(description='Pass MAC Address')
-    #parser.add_argument('-m', '--mac_address',  nargs='?', type=str, const="FA:57:99:71:5A:F5", default="FA:57:99:71:5A:F5", help='The MAC address of the sphero robot.')
-    #argparse_args = parser.parse_args()
+    parser = argparse.ArgumentParser(description='Pass MAC Address')
+    parser.add_argument('-m', '--mac_address',  nargs='?', type=str, const="FA:57:99:71:5A:F5", default="FA:57:99:71:5A:F5", help='The MAC address of the sphero robot.')
+    args = parser.parse_args()
 
+    print(args.mac_address)
+    if args.mac_address:
+        print("test")
+        if not validate_mac(args):
+            print("test2")
+            logging.error('Incorrect MAC address provided.')
+
+    exit(0)
     mac_address = "FA:57:99:71:5A:F5"
     with Sphero(mac_address=mac_address) as robot:
 
