@@ -4,6 +4,7 @@ import copy
 import geometry_msgs.msg
 import argparse
 import re
+import time
 
 import rclpy
 from rclpy.node import Node
@@ -14,7 +15,7 @@ from pysphero.core import Sphero
 from pysphero.device_api.sensor import CoreTime, Quaternion
 import pysphero.device_api.sensor as ps_sensor
 import pysphero.device_api.user_io as sphero_user_io
-from pysphero.driving import StabilizationIndex, Direction
+from pysphero.driving import StabilizationIndex, Direction, DirectionRawMotor
 
 from datetime import datetime
 from datetime import timedelta
@@ -26,6 +27,7 @@ import std_msgs.msg
 import std_srvs.srv
 import nav_msgs.msg
 import geometry_msgs.msg
+import sphero_interfaces.msg
 
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
 import tf_transformations
@@ -131,6 +133,7 @@ class SpheroROSDriver(Node):
         self.stabilization_srv = self.create_service(std_srvs.srv.SetBool, 'set_stabilization', self.srv_set_stabilization)
         self.aim_srv = self.create_service(std_srvs.srv.SetBool, 'reset_aim', self.srv_reset_aim)
         self.heading_sub = self.create_subscription(std_msgs.msg.Float32, 'set_heading', self.set_heading, 10)
+        self.raw_motor_sub = self.create_subscription(sphero_interfaces.msg.RawMotorCommand, 'raw_motor_command', self.sub_set_raw_motor_command, 10)
 #        self.angular_velocity_sub = self.create_subscription(Float32, 'set_angular_velocity', self.set_angular_velocity, 10)
 
     def _init_params(self):
@@ -183,6 +186,23 @@ class SpheroROSDriver(Node):
             color = sphero_user_io.Color(red=red, green=green, blue=blue)
 #            pixel = sphero_user_io.Pixel(x=3, y=4)
             self.robot.user_io.set_led_matrix_one_color(color)
+
+    def sub_set_raw_motor_command(self, msg):
+        if self.is_connected:
+
+            left_dir = DirectionRawMotor.forward
+            if msg.left < 0:
+                left_dir = DirectionRawMotor.reverse
+            left_speed = abs(max(-255, min(msg.left, 255)))
+
+            right_dir = DirectionRawMotor.forward
+            if msg.right < 0:
+                right_dir = DirectionRawMotor.reverse
+            right_speed = abs(max(-255, min(msg.left, 255)))
+
+            self.robot.driving.raw_motor(left_speed,left_dir,right_speed,right_dir)
+            time.sleep(0.2)
+            self.robot.driving.raw_motor()
 
     def sub_cmd_vel(self, msg):
 
