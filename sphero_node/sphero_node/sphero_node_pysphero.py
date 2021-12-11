@@ -28,13 +28,10 @@ import std_srvs.srv
 import nav_msgs.msg
 import geometry_msgs.msg
 import sphero_interfaces.msg
+import sphero_interfaces.srv
 
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
 import tf_transformations
-
-#odom_msg = nav_msgs.msg.Odometry()
-#sensor_data = dict()
-#lock_sensor_data = threading.Lock()
 
 class SpheroROSDriver(Node):
 
@@ -80,16 +77,9 @@ class SpheroROSDriver(Node):
 
         self._init_pubsub()
         self.timer = self.create_timer(0.1, self.pub_odom)
-
-
-
-        return
         self._init_params()
-
         self.update_rate = default_update_rate
         self.sampling_divisor = int(400/self.update_rate)
-
-
 
         self.imu = Imu()
         self.imu.orientation_covariance = [1e-6, 0., 0., 0., 1e-6, 0., 0., 0., 1e-6]
@@ -130,8 +120,11 @@ class SpheroROSDriver(Node):
         self.front_led_sub = self.create_subscription(std_msgs.msg.ColorRGBA, 'set_front_led', self.sub_set_front_led, 10)
         self.main_led_sub = self.create_subscription(std_msgs.msg.ColorRGBA, 'set_main_led', self.sub_set_main_led, 10)
         self.cmd_vel_sub = self.create_subscription(geometry_msgs.msg.Twist, 'cmd_vel', self.sub_cmd_vel, 10)
+        self.cmd_vel_sub_rel = self.create_subscription(geometry_msgs.msg.Twist, 'cmd_vel_rel', self.sub_cmd_vel_rel, 10)
         self.stabilization_srv = self.create_service(std_srvs.srv.SetBool, 'set_stabilization', self.srv_set_stabilization)
+        self.text_srv = self.create_service(sphero_interfaces.srv.SetText, 'set_text', self.srv_set_text)
         self.aim_srv = self.create_service(std_srvs.srv.SetBool, 'reset_aim', self.srv_reset_aim)
+
         self.heading_sub = self.create_subscription(std_msgs.msg.Float32, 'set_heading', self.set_heading, 10)
         self.raw_motor_sub = self.create_subscription(sphero_interfaces.msg.RawMotorCommand, 'raw_motor_command', self.sub_set_raw_motor_command, 10)
 #        self.angular_velocity_sub = self.create_subscription(Float32, 'set_angular_velocity', self.set_angular_velocity, 10)
@@ -207,25 +200,28 @@ class SpheroROSDriver(Node):
     def sub_cmd_vel(self, msg):
 
         if self.is_connected:
-            self.last_cmd_vel_time = self.get_clock().now()#datetime.now()
-            #self.cmd_heading = int(self.normalize_angle_positive(math.atan2(msg.linear.x,msg.linear.y))*180/math.pi)
-            #self.cmd_heading = max(0, min(self.cmd_heading, 359))
-            self.cmd_heading = 90
+            self.last_cmd_vel_time = self.get_clock().now()
+            self.cmd_heading = int(self.normalize_angle_positive(math.pi-math.atan2(msg.linear.y, msg.linear.x))*180.0/math.pi)
             self.cmd_speed = int(math.sqrt(math.pow(msg.linear.x,2)+math.pow(msg.linear.y,2))*255)
-            self.cmd_speed = max(-255, min(self.cmd_speed, 255)) #clip speed to range between -255 and 255
+            self.cmd_speed = max(0, min(self.cmd_speed, 255)) #clip speed to range between -255 and 255
             self.get_logger().info('Setting speed: {0}, heading: {1}'.format(str(self.cmd_speed), str(self.cmd_heading)))
-            self.cmd_speed = 0
-            if self.cmd_speed >= 0:
-                self.robot.driving.drive_with_heading(self.cmd_speed, self.cmd_heading, Direction.forward)
-            else:
-                cmd_speed = math.abs(self.cmd_speed)
-                self.robot.driving.drive_with_heading(cmd_speed, self.cmd_heading, Direction.reverse)
+            self.robot.driving.drive_with_heading(self.cmd_speed, self.cmd_heading, Direction.forward)
+
+    def sub_cmd_vel_rel(self, msg):
+
+        if self.is_connected:
+            self.last_cmd_vel_time = self.get_clock().now()
+            self.cmd_heading = int(self.normalize_angle_positive(math.pi-math.atan2(msg.linear.y, msg.linear.x)+self.yaw)*180.0/math.pi)
+            self.cmd_speed = int(math.sqrt(math.pow(msg.linear.x,2)+math.pow(msg.linear.y,2))*255)
+            self.cmd_speed = max(0, min(self.cmd_speed, 255)) #clip speed to range between -255 and 255
+            self.get_logger().info('Setting speed: {0}, heading: {1}'.format(str(self.cmd_speed), str(self.cmd_heading)))
+            self.robot.driving.drive_with_heading(self.cmd_speed, self.cmd_heading, Direction.forward)
 
     def set_heading(self, msg):
         if self.is_connected:
-            self.get_logger().info('Setting heading: {1}'.format(str(self.cmd_heading)))
+            self.get_logger().info('Setting heading: ' + str(self.cmd_heading))
             #"360 -" is due to the different environment representations
-            heading_deg = 360 - int(self.normalize_angle_positive(msg.data)*180.0/math.pi)
+            self.cmd_heading = int(self.normalize_angle_positive(math.pi-msg.data)*180.0/math.pi)
             self.robot.driving.drive_with_heading(0, self.cmd_heading, Direction.forward)
 
 
@@ -247,22 +243,40 @@ class SpheroROSDriver(Node):
         self.robot.driving.reset_yaw()
         return response
 
+    def srv_set_text(self, request, response):
+        self.get_logger().info('Setting text ' +str(request.text))
+        red = int(request.color.r * 255)
+        green = int(request.color.g * 255)
+        blue = int(request.color.b * 255)
+        if self.is_connected:
+            color = sphero_user_io.Color(red=red, green=green, blue=blue)
+            text = request.text
+            if len(text)>0:
+                if len(text)==1: self.robot.user_io.set_led_matrix_single_character(text, color)
+                else: self.robot.user_io.set_led_matrix_text_scrolling(text, color, repeat=False)
+            elif len(text)==0:
+                self.robot.user_io.set_led_matrix_one_color(color)
+        response.success=True
+        response.message="Yes"
+        return response
+
+
     def pub_odom(self):
         #global sensor_data
         self.lock_sensor_data.acquire()
         tmp_data = copy.deepcopy(self.sensor_data)
         self.lock_sensor_data.release()
-        print(tmp_data)
+
         if (len(tmp_data.keys())>0):
             msg = self.fill_odom_msg(tmp_data)
-            print (msg)
+            #print (msg)
             self.odom_pub.publish(msg)
 
 
     def fill_odom_msg(self, data: Dict):
 
         # get current location
-        odom_x = data.get(ps_sensor.Locator.y) / 100.0
+        odom_x = -data.get(ps_sensor.Locator.y) / 100.0
         odom_y = -1.0 * data.get(ps_sensor.Locator.x) / 100.0  # plus is right, negative is left --> using right handed coordinate system
 
         # TODO: check correct axis orientation --> yaw most likely other direction
@@ -280,7 +294,7 @@ class SpheroROSDriver(Node):
         vel_ang_z = 0.0
         # fill odometry message
 
-        odom = nav_msgs.msg.Odometry(header=std_msgs.msg.Header(frame_id="odom"), child_frame_id='base_footprint')
+        odom = nav_msgs.msg.Odometry(header=std_msgs.msg.Header(frame_id="odom"), child_frame_id='base_link')
         seconds, nanoseconds = self.get_clock().now().seconds_nanoseconds()
         odom.header.stamp.sec = seconds
         odom.header.stamp.nanosec = nanoseconds
@@ -292,6 +306,19 @@ class SpheroROSDriver(Node):
         quat_z = data.get(ps_sensor.Quaternion.z)
         quat_w = data.get(ps_sensor.Quaternion.w)
 
+
+        self.yaw = tf_transformations.euler_from_quaternion([quat_x, quat_y, quat_z, quat_w])[0]
+        self.roll = tf_transformations.euler_from_quaternion([quat_x, quat_y, quat_z, quat_w])[1]
+        self.pitch = tf_transformations.euler_from_quaternion([quat_x, quat_y, quat_z, quat_w])[2]
+        q_new=tf_transformations.quaternion_from_euler(self.roll,self.pitch,self.yaw)
+        #q_mat=tf_transformations.quaternion_matrix([quat_x,quat_y,quat_z,quat_w])
+        #rot=tf_transformations.rotation_matrix(math.pi,(1,0,0))
+        #q_new=tf_transformations.quaternion_from_matrix(rot.dot(q_mat))
+        quat_x = q_new[0]
+        quat_y = q_new[1]
+        quat_z = q_new[2]
+        quat_w = q_new[3]
+
         odom.pose.pose = geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=odom_x,
                                                                                  y=odom_y,
                                                                                  z=0.0),
@@ -300,78 +327,38 @@ class SpheroROSDriver(Node):
                                                                                          z=quat_z,
                                                                                          w=quat_w))
 
-        #odom.pose.pose = geometry_msgs.msg.Pose(position=geometry_msgs.msg.Point(x=odom_x,
-        #                                                                         y=odom_y,
-        #                                                                         z=0.0),
-        #                                        orientation=geometry_msgs.msg.Quaternion(x=q_orientation[0],
-        #                                                                                 y=q_orientation[1],
-        #                                                                                 z=q_orientation[2],
-        #                                                                                 w=q_orientation[3]))
-
         odom.twist.twist = geometry_msgs.msg.Twist(linear=geometry_msgs.msg.Vector3(x=vel_lin_x, y=vel_lin_y, z=0.0),
                                                  angular=geometry_msgs.msg.Vector3(x=0.0, y=0.0, z=vel_ang_z))
         odom.pose.covariance = self.ODOM_POSE_COVARIANCE
         odom.twist.covariance = self.ODOM_TWIST_COVARIANCE
         return odom
-        # publish the message
-        #self.sphero_node.pub_odom(odom)
-        logging.info('test')
-
 
     def notify_callback(self,data: Dict):
-        info = ", ".join("{:1.2f}".format(data.get(param)) for param in ps_sensor.Quaternion)
-        print(f"[{data.get(CoreTime.core_time):1.2f}] Quaternion (x, y, z, w): {info}")
-        print("=" * 60)
 
-        info = ", ".join("{:1.2f}".format(data.get(param)) for param in ps_sensor.Locator)
-        print(f"[{data.get(CoreTime.core_time):1.2f}] Locator (x, y): {info}")
+        display=False
+        if display:
+            info = ", ".join("{:1.2f}".format(data.get(param)) for param in ps_sensor.Quaternion)
+            print(f"[{data.get(CoreTime.core_time):1.2f}] Quaternion (x, y, z, w): {info}")
+            print("=" * 60)
 
-        print(data.get(ps_sensor.Locator))
-        print(data.get(ps_sensor.Locator.y))
-        info = ", ".join("{:1.2f}".format(data.get(param)) for param in ps_sensor.Velocity)
-        print(f"[{data.get(CoreTime.core_time):1.2f}] Velocity (x, y): {info}")
+            info = ", ".join("{:1.2f}".format(data.get(param)) for param in ps_sensor.Locator)
+            print(f"[{data.get(CoreTime.core_time):1.2f}] Locator (x, y): {info}")
 
-        #save received sensor data to global variable
-        #global sensor_data
+            print(data.get(ps_sensor.Locator))
+            print(data.get(ps_sensor.Locator.y))
+            info = ", ".join("{:1.2f}".format(data.get(param)) for param in ps_sensor.Velocity)
+            print(f"[{data.get(CoreTime.core_time):1.2f}] Velocity (x, y): {info}")
+
+        #save received sensor data
         self.lock_sensor_data.acquire()
         self.sensor_data = copy.deepcopy(data)
         self.lock_sensor_data.release()
 
 
-class SensorParse:
-
-    def __init__(self, robot):
-
-        self.robot = robot
-        #self.sphero_node = sphero_node
-        self.robot.sensor.set_notify(self.notify_callback, ps_sensor.CoreTime, ps_sensor.Quaternion, ps_sensor.Locator,
-                                ps_sensor.Velocity, ps_sensor.Attitude, ps_sensor.Accelerometer, interval=100)
-
-    def notify_callback(self,data: Dict):
-        info = ", ".join("{:1.2f}".format(data.get(param)) for param in ps_sensor.Quaternion)
-        print(f"[{data.get(CoreTime.core_time):1.2f}] Quaternion (x, y, z, w): {info}")
-        print("=" * 60)
-
-        info = ", ".join("{:1.2f}".format(data.get(param)) for param in ps_sensor.Locator)
-        print(f"[{data.get(CoreTime.core_time):1.2f}] Locator (x, y): {info}")
-
-        print(data.get(ps_sensor.Locator))
-        print(data.get(ps_sensor.Locator.y))
-        info = ", ".join("{:1.2f}".format(data.get(param)) for param in ps_sensor.Velocity)
-        print(f"[{data.get(CoreTime.core_time):1.2f}] Velocity (x, y): {info}")
-
-        #save received sensor data to global variable
-        global sensor_data
-        lock_sensor_data.acquire()
-        sensor_data = copy.deepcopy(data)
-        lock_sensor_data.release()
-
-
-
 #https://gist.github.com/netdisciple/5b390df991e6f17928380a3fcf7e7de6
 def validate_mac(args):
     mac_hwaddr = '{}'.format(args.mac_address)
-    mac_hwaddr = str(mac_hwaddr.lower())[2:-2]
+    mac_hwaddr = mac_hwaddr.lower()
     mac_validation = bool(re.match('^' + '[\:]'.join(['([0-9a-f]{2})']*6) + '$', mac_hwaddr))
     return mac_validation
 
@@ -382,16 +369,12 @@ def main():
     parser.add_argument('-m', '--mac_address',  nargs='?', type=str, const="FA:57:99:71:5A:F5", default="FA:57:99:71:5A:F5", help='The MAC address of the sphero robot.')
     args = parser.parse_args()
 
-    print(args.mac_address)
+    logging.info("Provided mac address " + str(args.mac_address))
     if args.mac_address:
-        print("test")
         if not validate_mac(args):
-            print("test2")
-            logging.error('Incorrect MAC address provided.')
+            logging.error('Incorrect MAC address provided. ' +str(args.mac_address))
 
-    exit(0)
-    mac_address = "FA:57:99:71:5A:F5"
-    with Sphero(mac_address=mac_address) as robot:
+    with Sphero(mac_address=args.mac_address) as robot:
 
         rclpy.init()
         sphero_node = SpheroROSDriver(robot)

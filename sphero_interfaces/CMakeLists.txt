@@ -6,9 +6,10 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 # find dependencies
-find_package(ament_cmake REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -23,6 +24,7 @@ endif()
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/RawMotorCommand.msg"
+  "srv/SetText.srv"
+  DEPENDENCIES std_msgs
 )
-
 ament_package()
