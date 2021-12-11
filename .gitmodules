@@ -1,0 +1,3 @@
+[submodule "lib/pysphero"]
+	path = lib/pysphero
+	url = https://github.com/EnotYoyo/pysphero.git
