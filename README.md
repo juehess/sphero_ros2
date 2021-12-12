@@ -26,7 +26,7 @@ This ROS2 wrapper builds upon the following projects:
 ```
 3. Update git submodules:
 ```
-  $ cd sphero_ros
+  $ cd sphero_ros2
   $ git submodule init
   $ git submodule update
 ```
