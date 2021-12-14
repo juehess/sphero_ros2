@@ -106,12 +106,12 @@ and speed of the robot given a velocity in x and y direction
 0. Find and note down the mac address of your sphero robot
 1. Running the ROS2 driver
 ```
-  $ ros2 run sphero_node sphero -m <mac_address>
+  $ ros2 run sphero_node sphero -m <??:??:??:??:??:??>
 ```
 2. Run TF publisher:
 The TF publisher publishes the transformation from /odom to /base_link
 ```
-  $ ros2 run sphero_node sphero_tf_publisher
+  $ ros2 run sphero_node sphero_tf_pub
 ```
 3. Run RVIZ and visualization
 ```
