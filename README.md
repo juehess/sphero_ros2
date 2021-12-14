@@ -8,6 +8,60 @@ This ROS2 wrapper builds upon the following projects:
 - [spherov2](https://github.com/artificial-intelligence-class/spherov2.py)
 - [sphero_ros](https://github.com/mmwise/sphero_ros)
 
+# Functionalities:
+
+## TF
+The driver provides the frame /base_link, /base_footprint, and /odom
+
+## Provided Services
+### Set stabilization:
+- Data type: std_srvs/SetBool
+- Topic: set_stabilization
+- Description: Turns stabilization on/off
+
+### Set text:
+- Data type: sphero_interfaces/SetText
+- Topic: set_text
+- Description: Displays text on main LED (maximum is 6 characters)
+
+## Provided Listeners
+### Set back LED
+- Data type: std_msgs/ColorRGBA
+- Topic: set_back_led
+- Description: Sets the color of the back LED of the robot
+
+### Set front LED
+- Data type: std_msgs/ColorRGBA
+- Topic: set_front_led
+- Description: Sets the color of the front LED of the robot
+  
+### Set main LED  
+- Data type: std_msgs/ColorRGBA
+- Topic: set_main_led
+- Description: Sets the color of the entire LED array of the robot
+
+### Set command velocity:
+- Data type: geometry_msgs/Twist
+- Topic: cmd_vel
+- Description: Sets the direction (in odometry/global frame of reference) 
+and speed of the robot given a velocity in x and y direction
+
+### Set command velocity relative:
+- Data type: geometry_msgs/Twist
+- Topic: cmd_vel
+- Description: Sets the direction (in local/robot frame of reference) 
+and speed of the robot given a velocity in x and y direction
+
+### Set heading:
+- Data type: std_msgs/Float32 (defined in radians; from -pi to pi)
+- Topic: set_heading
+- Description: Sets the heading of the robot in the global/odom reference frame 
+
+### Set raw motor command (behaves strangely) :
+- Data type: sphero_interfaces/RawMotorCommand (defined from -255 to 255)
+- Topic: raw_motor_command
+- Description: Sets raw speed of left and right motor
+
 # Installation
 0. Edit .bashrc and add:
 ```
