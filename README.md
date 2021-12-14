@@ -103,7 +103,12 @@ and speed of the robot given a velocity in x and y direction
 ```
 
 # Running
-0. Find and note down the mac address of your sphero robot
+0. Find and note down the mac address of your sphero robot, e.g., using bluez tools:
+```
+  $ sudo apt install bluez-tools
+  $ bt-device -l
+```
+
 1. Running the ROS2 driver
 ```
   $ ros2 run sphero_node sphero -m <??:??:??:??:??:??>
