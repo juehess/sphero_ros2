@@ -276,7 +276,7 @@ class SpheroROSDriver(Node):
     def fill_odom_msg(self, data: Dict):
 
         # get current location
-        odom_x = -data.get(ps_sensor.Locator.y) / 100.0
+        odom_x = data.get(ps_sensor.Locator.y) / 100.0
         odom_y = -1.0 * data.get(ps_sensor.Locator.x) / 100.0  # plus is right, negative is left --> using right handed coordinate system
 
         # TODO: check correct axis orientation --> yaw most likely other direction
@@ -307,9 +307,10 @@ class SpheroROSDriver(Node):
         quat_w = data.get(ps_sensor.Quaternion.w)
 
 
-        self.yaw = tf_transformations.euler_from_quaternion([quat_x, quat_y, quat_z, quat_w])[0]
+        yaw = tf_transformations.euler_from_quaternion([quat_x, quat_y, quat_z, quat_w])[0]
+        self.yaw = self.normalize_angle_positive(yaw+math.pi)
         self.roll = tf_transformations.euler_from_quaternion([quat_x, quat_y, quat_z, quat_w])[1]
-        self.pitch = tf_transformations.euler_from_quaternion([quat_x, quat_y, quat_z, quat_w])[2]
+        self.pitch = -tf_transformations.euler_from_quaternion([quat_x, quat_y, quat_z, quat_w])[2]
         q_new=tf_transformations.quaternion_from_euler(self.roll,self.pitch,self.yaw)
         #q_mat=tf_transformations.quaternion_matrix([quat_x,quat_y,quat_z,quat_w])
         #rot=tf_transformations.rotation_matrix(math.pi,(1,0,0))
