@@ -11,12 +11,14 @@ from rclpy.node import Node
 
 from typing import Dict
 
-from pysphero.core import Sphero
+from pysphero.core import Sphero, Toy
 from pysphero.device_api.sensor import CoreTime, Quaternion
 import pysphero.device_api.sensor as ps_sensor
 import pysphero.device_api.user_io as sphero_user_io
 from pysphero.driving import StabilizationIndex, Direction, DirectionRawMotor
-
+from pysphero.bluetooth.gatt_adapter import GattAdapter
+from pysphero.bluetooth.bluepy_adapter import BluepyAdapter
+from pysphero.bluetooth.pygatt_adapter import PygattAdapter
 from datetime import datetime
 from datetime import timedelta
 import threading
@@ -62,6 +64,7 @@ class SpheroROSDriver(Node):
         self.is_connected = True
         self.sensor_data = dict()
         self.lock_sensor_data = threading.Lock()
+        self.lock_robot = threading.Lock()
         self.robot.sensor.set_notify(self.notify_callback, ps_sensor.CoreTime, ps_sensor.Quaternion, ps_sensor.Locator,
                                 ps_sensor.Velocity, ps_sensor.Attitude, ps_sensor.Accelerometer, interval=100)
 
@@ -107,7 +110,9 @@ class SpheroROSDriver(Node):
                 self.get_logger().info("setting to 0")
                 self.cmd_heading = 0
                 self.cmd_speed = 0
+                self.lock_robot.acquire()
                 self.robot.driving.drive_with_heading(self.cmd_heading, self.cmd_speed , Direction.forward)
+                self.lock_robot.release()
             #if (now-self.last_diagnostics_time) > self.diag_update_rate:
             #    self.last_diagnostics_time = now
             #    self.publish_diagnostics(now)
@@ -159,7 +164,9 @@ class SpheroROSDriver(Node):
         self.get_logger().info('Setting back LED to red: {0}, green: {1}, blue: {2}'.format(str(red), str(green), str(blue)))
         if self.is_connected:
             color = sphero_user_io.Color(red=red, green=green, blue=blue)
+            self.lock_robot.acquire()
             self.robot.user_io.set_all_leds_8_bit_mask(front_color=self.front_color, back_color=color)
+            self.lock_robot.release()
 
     def sub_set_front_led(self, msg):
         red = int(msg.r * 255)
@@ -168,7 +175,9 @@ class SpheroROSDriver(Node):
         self.get_logger().info('Setting front LED to red: {0}, green: {1}, blue: {2}'.format(str(red), str(green), str(blue)))
         if self.is_connected:
             color = sphero_user_io.Color(red=red, green=green, blue=blue)
+            self.lock_robot.acquire()
             self.robot.user_io.set_all_leds_8_bit_mask(front_color=color, back_color=self.back_color)
+            self.lock_robot.release()
 
     def sub_set_main_led(self, msg):
         red = int(msg.r * 255)
@@ -178,7 +187,9 @@ class SpheroROSDriver(Node):
         if self.is_connected:
             color = sphero_user_io.Color(red=red, green=green, blue=blue)
 #            pixel = sphero_user_io.Pixel(x=3, y=4)
+            self.lock_robot.acquire()
             self.robot.user_io.set_led_matrix_one_color(color)
+            self.lock_robot.release()
 
     def sub_set_raw_motor_command(self, msg):
         if self.is_connected:
@@ -193,9 +204,13 @@ class SpheroROSDriver(Node):
                 right_dir = DirectionRawMotor.reverse
             right_speed = abs(max(-255, min(msg.left, 255)))
 
+            self.lock_robot.acquire()
             self.robot.driving.raw_motor(left_speed,left_dir,right_speed,right_dir)
+            self.lock_robot.release()
             time.sleep(0.2)
+            self.lock_robot.acquire()
             self.robot.driving.raw_motor()
+            self.lock_robot.release()
 
     def sub_cmd_vel(self, msg):
 
@@ -205,7 +220,9 @@ class SpheroROSDriver(Node):
             self.cmd_speed = int(math.sqrt(math.pow(msg.linear.x,2)+math.pow(msg.linear.y,2))*255)
             self.cmd_speed = max(0, min(self.cmd_speed, 255)) #clip speed to range between -255 and 255
             self.get_logger().info('Setting speed: {0}, heading: {1}'.format(str(self.cmd_speed), str(self.cmd_heading)))
+            self.lock_robot.acquire()
             self.robot.driving.drive_with_heading(self.cmd_speed, self.cmd_heading, Direction.forward)
+            self.lock_robot.release()
 
     def sub_cmd_vel_rel(self, msg):
 
@@ -215,24 +232,30 @@ class SpheroROSDriver(Node):
             self.cmd_speed = int(math.sqrt(math.pow(msg.linear.x,2)+math.pow(msg.linear.y,2))*255)
             self.cmd_speed = max(0, min(self.cmd_speed, 255)) #clip speed to range between -255 and 255
             self.get_logger().info('Setting speed: {0}, heading: {1}'.format(str(self.cmd_speed), str(self.cmd_heading)))
+            self.lock_robot.acquire()
             self.robot.driving.drive_with_heading(self.cmd_speed, self.cmd_heading, Direction.forward)
+            self.lock_robot.release()
 
     def set_heading(self, msg):
         if self.is_connected:
             self.get_logger().info('Setting heading: ' + str(self.cmd_heading))
             #"360 -" is due to the different environment representations
             self.cmd_heading = int(self.normalize_angle_positive(math.pi-msg.data)*180.0/math.pi)
+            self.lock_robot.acquire()
             self.robot.driving.drive_with_heading(0, self.cmd_heading, Direction.forward)
+            self.lock_robot.release()
 
 
 
     def srv_set_stabilization(self, request, response):
         self.get_logger().info('Incoming request to set stabilization ' + str(request.data))
 
+        self.lock_robot.acquire()
         if (request.data==True):
             self.robot.driving.set_stabilization(StabilizationIndex.full_control_system)
         elif (request.data==False):
             self.robot.driving.set_stabilization(StabilizationIndex.no_control_system)
+        self.lock_robot.release()
         response.success = True
         response.message = str("Stabilize set to " + str(request.data))
         return response
@@ -240,7 +263,9 @@ class SpheroROSDriver(Node):
 
     def srv_reset_aim(self, request, response):
         self.get_logger().info('Reset aim service call received.')
+        self.lock_robot.acquire()
         self.robot.driving.reset_yaw()
+        self.lock_robot.release()
         return response
 
     def srv_set_text(self, request, response):
@@ -251,11 +276,13 @@ class SpheroROSDriver(Node):
         if self.is_connected:
             color = sphero_user_io.Color(red=red, green=green, blue=blue)
             text = request.text
+            self.lock_robot.acquire()
             if len(text)>0:
                 if len(text)==1: self.robot.user_io.set_led_matrix_single_character(text, color)
                 else: self.robot.user_io.set_led_matrix_text_scrolling(text, color, repeat=False)
             elif len(text)==0:
                 self.robot.user_io.set_led_matrix_one_color(color)
+            self.lock_robot.release()
         response.success=True
         response.message="Yes"
         return response
@@ -375,7 +402,7 @@ def main():
         if not validate_mac(args):
             logging.error('Incorrect MAC address provided. ' +str(args.mac_address))
 
-    with Sphero(mac_address=args.mac_address) as robot:
+    with Sphero(toy_type=Toy.bb8,mac_address=args.mac_address, ble_adapter_cls=GattAdapter) as robot:
 
         rclpy.init()
         sphero_node = SpheroROSDriver(robot)
