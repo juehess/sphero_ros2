@@ -201,7 +201,7 @@ class SpheroROSDriver(Node):
 
         if self.is_connected:
             self.last_cmd_vel_time = self.get_clock().now()
-            self.cmd_heading = int(self.normalize_angle_positive(math.pi-math.atan2(msg.linear.y, msg.linear.x))*180.0/math.pi)
+            self.cmd_heading = int(self.normalize_angle_positive(math.atan2(msg.linear.x, msg.linear.y)-math.pi/2.0)*180.0/math.pi)
             self.cmd_speed = int(math.sqrt(math.pow(msg.linear.x,2)+math.pow(msg.linear.y,2))*255)
             self.cmd_speed = max(0, min(self.cmd_speed, 255)) #clip speed to range between -255 and 255
             self.get_logger().info('Setting speed: {0}, heading: {1}'.format(str(self.cmd_speed), str(self.cmd_heading)))
@@ -309,7 +309,7 @@ class SpheroROSDriver(Node):
 
         yaw = tf_transformations.euler_from_quaternion([quat_x, quat_y, quat_z, quat_w])[0]
         self.yaw = self.normalize_angle_positive(yaw+math.pi)
-        self.roll = tf_transformations.euler_from_quaternion([quat_x, quat_y, quat_z, quat_w])[1]
+        self.roll = -tf_transformations.euler_from_quaternion([quat_x, quat_y, quat_z, quat_w])[1]
         self.pitch = -tf_transformations.euler_from_quaternion([quat_x, quat_y, quat_z, quat_w])[2]
         q_new=tf_transformations.quaternion_from_euler(self.roll,self.pitch,self.yaw)
         #q_mat=tf_transformations.quaternion_matrix([quat_x,quat_y,quat_z,quat_w])
