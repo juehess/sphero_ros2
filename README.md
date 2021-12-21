@@ -86,7 +86,7 @@ and speed of the robot given a velocity in x and y direction
 ```
 4. Install pysphero driver
 ```
-  $ pip3 install lib/pysphero
+  $ pip3 -e install lib/pysphero
 ```
 5. Install ROS2 dependencies
 ```
